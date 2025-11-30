@@ -1,19 +1,57 @@
 import sqlite3
 import sys
+import os
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QTableWidget, QHeaderView, QWidget
-from PyQt6 import uic
+from UI import mainUI, addEditCoffeeFormUI
 
 
-class MainWD(QMainWindow):
+def get_appdata_path(appname):
+    if sys.platform == "win32":
+        path = os.path.join(os.environ['APPDATA'], appname)
+    elif sys.platform == "darwin":
+        path = os.path.join(os.path.expanduser("~"), "Library", "Application Support", appname)
+    else:
+        path = os.path.join(os.path.expanduser("~"), ".local", "share", appname)
+
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    return path
+
+
+class MainWD(QMainWindow, mainUI.Ui_MainWindow):
     def __init__(self):
         super().__init__()
-        uic.loadUi('main.ui', self)
-        self.coffee_db = sqlite3.connect('coffee.sqlite')
-        self.cur = self.coffee_db.cursor()
+        self.setupUi(self)
+        self.load_db()
         self.update_table()
         self.add_btn.clicked.connect(self.add_coffee)
         self.edit_btn.clicked.connect(self.edit_coffee)
+
+    def load_db(self):
+        path = os.path.join(get_appdata_path('Coffee'), 'DATA')
+        if not os.path.exists(path):
+            os.makedirs(path)
+            path = os.path.join(path, 'coffee.sqlite')
+            self.coffee_db = sqlite3.connect(path)
+            self.cur = self.coffee_db.cursor()
+            self.cur.execute("""CREATE TABLE Coffee(
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            sort TEXT NOT NULL,
+            roasting INT NOT NULL,
+            type TEXT NOT NULL,
+            description TEXT,
+            cost INT NOT NULL,
+            volume TEXT NOT NULL)""")
+            self.coffee_db.commit()
+            return
+
+        path = os.path.join(path, 'coffee.sqlite')
+
+        self.coffee_db = sqlite3.connect(path)
+        self.cur = self.coffee_db.cursor()
 
     def update_table(self):
         result = self.cur.execute('SELECT * FROM Coffee').fetchall()
@@ -42,10 +80,10 @@ class MainWD(QMainWindow):
         self.form.show()
 
 
-class addEditCoffee(QWidget):
+class addEditCoffee(QWidget, addEditCoffeeFormUI.Ui_Form):
     def __init__(self, task, wd):
         super().__init__()
-        uic.loadUi('addEditCoffeeForm.ui', self)
+        self.setupUi(self)
         self.wd = wd
 
         if task == 'add':
