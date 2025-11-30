@@ -1,7 +1,7 @@
 import sqlite3
 import sys
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QTableWidget, QHeaderView
+from PyQt6.QtWidgets import QApplication, QMainWindow, QTableWidgetItem, QTableWidget, QHeaderView, QWidget
 from PyQt6 import uic
 
 
@@ -11,18 +11,115 @@ class MainWD(QMainWindow):
         uic.loadUi('main.ui', self)
         self.coffee_db = sqlite3.connect('coffee.sqlite')
         self.cur = self.coffee_db.cursor()
-        self.tableWidget: QTableWidget
+        self.update_table()
+        self.add_btn.clicked.connect(self.add_coffee)
+        self.edit_btn.clicked.connect(self.edit_coffee)
+
+    def update_table(self):
         result = self.cur.execute('SELECT * FROM Coffee').fetchall()
-        self.tableWidget.setColumnCount(7)
+        self.tableWidget.setColumnCount(8)
         self.tableWidget.setRowCount(len(result))
-        self.tableWidget.setHorizontalHeaderLabels(['Название', "Сорт", "Степень обжарки", "Тип", "Описание вкуса",
-                                                    "Стоимость", "Объём"])
+        self.tableWidget.setHorizontalHeaderLabels(['ID', 'Название', "Сорт", "Степень обжарки", "Тип",
+                                                    "Описание вкуса", "Стоимость", "Объём"])
         header = self.tableWidget.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         for r, row in enumerate(result):
-            for c, col in enumerate(row[1:]):
+            for c, col in enumerate(row):
                 item = QTableWidgetItem(str(col))
                 self.tableWidget.setItem(r, c, item)
+
+        self.tableWidget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+
+    def add_coffee(self):
+        self.form = addEditCoffee('add', self)
+        self.form.show()
+
+    def edit_coffee(self):
+        if not self.tableWidget.selectedItems():
+            return
+
+        self.form = addEditCoffee('edit', self)
+        self.form.show()
+
+
+class addEditCoffee(QWidget):
+    def __init__(self, task, wd):
+        super().__init__()
+        uic.loadUi('addEditCoffeeForm.ui', self)
+        self.wd = wd
+
+        if task == 'add':
+            self.accept.clicked.connect(self.add_coffee)
+
+        elif task == 'edit':
+            self.accept.clicked.connect(self.edit_coffee)
+            result = wd.tableWidget.selectedItems()
+            self.id_ = int(result[0].text())
+            self.name.setText(result[1].text())
+            self.sort.setText(result[2].text())
+            self.roasting.setCurrentText(result[3].text())
+            self.type.setCurrentText(result[4].text())
+            self.description.setPlainText(result[5].text())
+            self.cost.setText(result[6].text())
+            volume = result[7].text().split()
+            self.volume.setText(volume[0])
+            self.volume_comboBox.setCurrentText(volume[1])
+
+    def get_verdict(self):
+        if not self.name.text().strip():
+            return False
+
+        if not self.sort.text().strip():
+            return False
+
+        if not self.cost.text().strip().isdigit():
+            return False
+
+        if not self.volume.text().strip().isdigit():
+            return False
+
+        return True
+
+    def add_coffee(self):
+        if not self.get_verdict():
+            return
+
+        parameters = {
+            'name': self.name.text().strip(),
+            'sort': self.sort.text().strip(),
+            'roasting': int(self.roasting.currentText()),
+            'type': self.type.currentText(),
+            'description': self.description.toPlainText(),
+            'cost': int(self.cost.text().strip()),
+            'volume': ' '.join([self.volume.text().strip(), self.volume_comboBox.currentText()])
+        }
+        self.wd.cur.execute("""INSERT INTO Coffee(name, sort, roasting, type, description, cost, volume)
+        VALUES(:name, :sort, :roasting, :type, :description, :cost, :volume)""", parameters)
+        self.wd.coffee_db.commit()
+        self.wd.update_table()
+        self.close()
+
+    def edit_coffee(self):
+        if not self.get_verdict():
+            return
+
+        parameters = {
+            'name': self.name.text().strip(),
+            'sort': self.sort.text().strip(),
+            'roasting': int(self.roasting.currentText()),
+            'type': self.type.currentText(),
+            'description': self.description.toPlainText(),
+            'cost': int(self.cost.text().strip()),
+            'volume': ' '.join([self.volume.text().strip(), self.volume_comboBox.currentText()]),
+            'id': self.id_
+        }
+        self.wd.cur.execute("""UPDATE Coffee
+        SET name = :name, sort = :sort, roasting = :roasting, type = :type, description = :description,
+        cost = :cost, volume = :volume
+        WHERE id = :id""", parameters)
+        self.wd.coffee_db.commit()
+        self.wd.update_table()
+        self.close()
 
 
 if __name__ == '__main__':
